@@ -30,16 +30,25 @@
       subject.  However, the test namespaces consuming this will in all likelihood have these dependencies anyway
       so this probably isn't a significant shortcoming of this macro."
      [name params & forms]
-     (let [sym->rule (->> params
-                          :rules
-                          (partition 2)
+     (let [parition-or-fail (fn [section division args]
+                              (let [partitioned (partition-all division (section args))
+                                    last-segment (last partitioned)]
+                                (cond
+                                  (nil? last-segment) nil
+                                  (= division (count last-segment)) partitioned
+                                  :else (throw (ex-info (str "Malformed def-rules-test. " section
+                                                             " expects a number of forms divisible by " division ". ")
+                                                        {:test-name name
+                                                         :dangling-forms last-segment})))))
+
+           sym->rule (->> params
+                          (parition-or-fail :rules 2)
                           (into {}
                                 (map (fn [[rule-name [lhs rhs props]]]
                                        [rule-name (assoc (dsl/parse-rule* lhs rhs props {}) :name (str rule-name))]))))
 
            sym->query (->> params
-                           :queries
-                           (partition 2)
+                           (parition-or-fail :queries 2)
                            (into {}
                                  (map (fn [[query-name [params lhs]]]
                                         [query-name (assoc (dsl/parse-query* params lhs {}) :name (str query-name))]))))
@@ -51,8 +60,7 @@
                                                p-syms))
 
            session-syms->session-forms (->> params
-                                            :sessions
-                                            (partition 3)
+                                            (parition-or-fail :sessions 3)
                                             (into []
                                                   (comp (map (fn [[session-name production-syms session-opts]]
                                                                [session-name (production-syms->productions production-syms) session-opts]))
