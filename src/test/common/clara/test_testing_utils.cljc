@@ -4,10 +4,12 @@
                [clara.rules :as r]
 
                [clara.rules.testfacts :refer [->Temperature ->Cold]]
-               [clojure.test :refer [is deftest run-tests] :as t])
+               [clojure.test :refer [is deftest run-tests testing] :as t])
      (:import [clara.rules.testfacts
                Temperature
-               Cold]))
+               Cold]
+              [clojure.lang
+               ExceptionInfo]))
 
    :cljs
    (ns clara.test-testing-utils
@@ -16,7 +18,7 @@
                                               ->Cold Cold]]
                [cljs.test :as t])
      (:require-macros [clara.tools.testing-utils :refer [def-rules-test]]
-                      [cljs.test :refer (is deftest run-tests)])))
+                      [cljs.test :refer (is deftest run-tests testing)])))
 
 (def test-ran-atom (atom false))
 
@@ -54,3 +56,33 @@
                   (r/insert (->Temperature -50 "MCI"))
                   r/fire-rules
                   (r/query query1)))))
+
+(deftest argument-validation-tests
+  (let [partition-counts {:rules 2
+                          :queries 2
+                          :sessions 3}
+        ->msg-pattern #(re-pattern
+                         (str "Malformed def-rules-test. " %1 " expects a number of forms divisible by " %2))]
+
+    (doseq [[section failure-test-forms] {:rules '[[rule1]
+                                                   [rule1 [[]
+                                                           (r/insert! "Why is it called clara anyway?")]
+                                                    rule2]]
+                                          :queries '[[query1]
+                                                     [query1 [[]
+                                                              [[Cold (= ?t temperature)]]]
+                                                      query2]]
+                                          :sessions '[[session1]
+                                                      [session1 []]
+                                                      [session1 [] {}
+                                                       session-without-associated-bindings]
+                                                      [session1 [] {}
+                                                       session-without-associated-bindings []]]}
+            form failure-test-forms]
+      (testing (str "Testing " section " for form: " form)
+        (is (thrown-with-msg?
+            ExceptionInfo
+            (->msg-pattern section (section partition-counts))
+            (eval `(def-rules-test test-name#
+                     {~section ~form}
+                     (reset! ~'test-ran-atom true)))))))))
