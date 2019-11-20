@@ -1730,7 +1730,9 @@
 
     (loop [next-group (mem/next-activation-group transient-memory)
            last-group nil]
-
+      ;; Enables cancellation of the execution by another thread
+      ;; Useful for executing inside a future, where future-cancel sets interrupted.
+      #?(:clj (when (Thread/interrupted) (throw (InterruptedException.))))
       (if next-group
 
         (if (and last-group (not= last-group next-group))
